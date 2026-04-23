@@ -1,6 +1,10 @@
+from typing import Optional, List
+from urllib.parse import urljoin, urlparse
+import html2text
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from dataclasses import dataclass
-from typing import List, Optional
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, DefaultMarkdownGenerator
+import asyncio
 
 
 @dataclass
@@ -13,11 +17,11 @@ class PageData:
 
 class Crawl4AIAdapter:
     def __init__(
-            self,
-            headless: bool = True,
-            use_stealth: bool = True,
-            proxy: Optional[str] = None,
-            wait_for: Optional[str] = None
+        self,
+        headless: bool = True,
+        use_stealth: bool = True,
+        proxy: Optional[str] = None,
+        wait_for: Optional[str] = None
     ):
         extra_args = [
             '--disable-blink-features=AutomationControlled',
@@ -44,7 +48,10 @@ class Crawl4AIAdapter:
         if proxy:
             self.browser_config.proxy = proxy
 
-    async def fetch(self, url: str) -> Optional[PageData]:
+    def fetch(self, url: str) -> Optional[PageData]:
+        return asyncio.run(self._async_fetch(url))
+
+    async def _async_fetch(self, url: str) -> Optional[PageData]:
         async with AsyncWebCrawler(config=self.browser_config) as crawler:
             result = await crawler.arun(url=url, config=self.crawler_config)
 
