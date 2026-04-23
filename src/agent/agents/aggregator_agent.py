@@ -11,8 +11,8 @@ logger = setup_logger("AGGREGATOR_AGENT")
 
 
 class AggregatorAgent(BaseAgent):
-    def __init__(self, model_key: str = "aggregator"):
-        super().__init__(model_key)
+    def __init__(self, llm=None):
+        super().__init__(llm)
         self.system_prompt = "You are a data aggregation specialist. Merge and deduplicate data."
 
     def aggregate_flexible(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -20,7 +20,6 @@ class AggregatorAgent(BaseAgent):
             return {}
         if len(data) == 1:
             return data[0]
-
         return self._llm_aggregate(data, schema=None)
 
     def aggregate_strict(self, data: List[Dict[str, Any]], schema: Type[BaseModel]) -> Dict[str, Any]:
@@ -41,15 +40,11 @@ class AggregatorAgent(BaseAgent):
             result["_schema_validation_error"] = True
             return result
 
-    def _llm_aggregate(
-        self,
-        data: List[Dict[str, Any]],
-        schema: Optional[Type[BaseModel]] = None
-    ) -> Dict[str, Any]:
-
+    def _llm_aggregate(self, data: List[Dict[str, Any]], schema: Optional[Type[BaseModel]] = None) -> Dict[str, Any]:
         data_json = json.dumps(data, ensure_ascii=False, indent=2)
 
         prompt = f"""Merge and deduplicate the following JSON data:
+        
             {data_json}
             
             Instructions:

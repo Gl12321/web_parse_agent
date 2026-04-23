@@ -1,20 +1,18 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-from src.core.config import get_settings
-from src.core.logger import setup_logger
+from langchain_core.language_models import BaseChatModel
+
 from src.infrastructure.llm.llm_wrapper import get_llm
+from src.core.logger import setup_logger
 
-settings = get_settings()
 logger = setup_logger("BASE_AGENT")
 
 
 class BaseAgent:
-    def __init__(self, model_key: str = "default"):
-        cfg = settings.MODELS.get(model_key, settings.MODELS["default"])
-        self.llm = get_llm(model_key)
+    def __init__(self, llm: Optional[BaseChatModel] = None):
+        self.llm = llm if llm else get_llm()
         self.system_prompt = ""
-        self.model_key = model_key
-        logger.info(f"Initialized {self.__class__.__name__} with model: {cfg.get('model_name', 'unknown')}")
+        logger.info(f"Initialized {self.__class__.__name__}")
 
     def _get_strict_system_prompt(self, context: str) -> str:
         return (

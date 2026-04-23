@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -9,25 +9,27 @@ logger = setup_logger("NAVIGATOR_AGENT")
 
 
 class NavigatorAgent(BaseAgent):
-    def __init__(self, model_key: str = "navigator"):
-        super().__init__(model_key)
-        self.system_prompt = "You are a URL selection specialist. Pick the most relevant URL."
+    def __init__(self, llm=None):
+        super().__init__(llm)
+        self.system_prompt = "You are a URL selection specialist. Pick the most relevant URL or return NONE."
 
-    def select_next_url(self, candidates: List[str], goal: str, current_depth: int = 0) -> Optional[str]:
+    def select_next_url(self, candidates: List[str], goal: str) -> Optional[str]:
         if not candidates:
             return None
         if len(candidates) == 1:
             return candidates[0]
-
         return self._llm_select(candidates, goal)
 
     def _llm_select(self, candidates: List[str], goal: str) -> Optional[str]:
-        prompt = f"""Goal: {goal}        
+        prompt = f"""Goal: {goal}
             Available URLs:
             {chr(10).join(f"- {url}" for url in candidates)}
             
-            Return ONLY the single most relevant URL that best matches the goal.
-            No explanations, just the URL."""
+            Analyze if any URL is relevant to the goal.
+            - If relevant URL exists: return ONLY that URL
+            - If NO relevant URLs: return exactly "NONE"
+            
+            Response: single URL or "NONE"""
 
         try:
             messages = [
@@ -40,8 +42,12 @@ class NavigatorAgent(BaseAgent):
             selected = selected.split('\n')[0].strip()
             selected = selected.strip('"\'<>[]')
 
+            if selected.upper() == "NONE":
+                logger.info("No relevant URLs found")
+                return None
+
             if selected in candidates:
-                logger.info(f"LLM selected: {selected}")
+                logger.info(f"Selected: {selected}")
                 return selected
 
             for cand in candidates:
@@ -52,5 +58,5 @@ class NavigatorAgent(BaseAgent):
             return candidates[0]
 
         except Exception as e:
-            logger.error(f"LLM selection failed: {e}")
+            logger.error(f"Selection failed: {e}")
             return candidates[0]

@@ -8,14 +8,14 @@ logger = setup_logger("CRAWLER_AGENT")
 
 
 class CrawlerAgent(BaseAgent):
-    def __init__(self, model_key: str = "default"):
-        super().__init__(model_key)
+    def __init__(self):
+        super().__init__()
         self.crawler = Crawl4AIAdapter(use_stealth=True)
 
-    async def fetch(self, url: str) -> Optional[PageData]:
+    def fetch(self, url: str) -> Optional[PageData]:
         try:
             logger.info(f"Fetching: {url}")
-            result = await self.crawler.fetch(url)
+            result = self.crawler.fetch(url)
             if result:
                 logger.info(f"Success: {url} ({len(result.markdown)} chars, {len(result.links)} links)")
             else:
