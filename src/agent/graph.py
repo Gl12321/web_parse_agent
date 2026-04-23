@@ -4,7 +4,8 @@ from urllib.parse import urljoin, urlparse
 from langgraph.graph import StateGraph, END
 
 from src.agent.state import AgentState
-from src.infrastructure.crawler import Crawl4AIAdapter, PageData
+from src.agent.agents.crawler_agent import CrawlerAgent
+from src.infrastructure.crawler import PageData
 
 
 class WebParsingGraph:
@@ -13,7 +14,7 @@ class WebParsingGraph:
         navigator=None,
         extractor=None,
         aggregator=None,
-        crawler: Optional[Crawl4AIAdapter] = None,
+        crawler: Optional[CrawlerAgent] = None,
         max_depth: int = 3,
         max_pages: int = 10
     ):

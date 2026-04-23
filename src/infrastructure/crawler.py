@@ -1,6 +1,4 @@
 from typing import Optional, List
-from urllib.parse import urljoin, urlparse
-import html2text
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from dataclasses import dataclass
@@ -65,3 +63,22 @@ class Crawl4AIAdapter:
                 title=result.metadata.get('title', '') if result.metadata else '',
                 links=links
             )
+
+
+if __name__ == "__main__":
+    url = "https://innowise.com/contact-us/"
+
+    crawler = Crawl4AIAdapter()
+    page = crawler.fetch(url)
+
+    if page:
+        print(f"URL: {page.url}")
+        print(f"Title: {page.title}")
+        print(f"Links: {len(page.links)}")
+        print(f"\n--- MARKDOWN ---\n")
+        print(page.markdown[:21000])
+        if len(page.markdown) > 2000:
+            print(f"\n... [{len(page.markdown) - 2000} chars more]")
+
+
+
