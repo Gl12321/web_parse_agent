@@ -1,5 +1,4 @@
-import asyncio
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from urllib.parse import urljoin, urlparse
 
 from langgraph.graph import StateGraph, END
@@ -21,54 +20,46 @@ class WebParsingGraph:
         self.navigator = navigator
         self.extractor = extractor
         self.aggregator = aggregator
-        self.crawler = crawler or Crawl4AIAdapter(use_stealth=True)
+        self.crawler = crawler
         self.max_depth = max_depth
         self.max_pages = max_pages
+        self._workflow = self._build_workflow()
 
-    def _init_state(self, state: AgentState) -> AgentState:
-        if not state.get("to_visit"):
-            state["to_visit"] = [state["start_url"]]
-        if state.get("current_depth") is None:
-            state["current_depth"] = 0
-        if state.get("pages_processed") is None:
-            state["pages_processed"] = 0
-        if state.get("done") is None:
-            state["done"] = False
-        if state.get("pages_raw") is None:
-            state["pages_raw"] = {}
-        if state.get("page_results") is None:
-            state["page_results"] = {}
-        if state.get("current_url") is None:
-            state["current_url"] = None
-        return state
-
-    def _navigator(self, state: AgentState) -> AgentState:
+    def _navigator_node(self, state: AgentState) -> AgentState:
+        max_depth = state.get("max_depth", self.max_depth)
         to_visit = state.get("to_visit", [])
+        
+        to_visit = [(u, d) for u, d in to_visit if d <= max_depth]
+        state["to_visit"] = to_visit
+        
         if not to_visit:
             state["done"] = True
             state["current_url"] = None
+            state["current_depth"] = 0
             return state
 
-        if self.navigator:
-            next_url = self.navigator.select_next_url(
-                candidates=to_visit,
-                goal=state["goal"],
-                current_depth=state.get("current_depth", 0)
-            )
-        else:
-            next_url = to_visit[0]
+        candidates = [u for u, _ in to_visit]
+        next_url = self.navigator.select_next_url(candidates, state["goal"])
 
-        state["to_visit"] = [u for u in to_visit if u != next_url]
-        state["current_url"] = next_url
+        if next_url is None:
+            state["done"] = True
+            state["current_url"] = None
+            state["current_depth"] = 0
+        else:
+            selected_depth = next((d for u, d in to_visit if u == next_url), 0)
+            state["to_visit"] = [(u, d) for u, d in to_visit if u != next_url]
+            state["current_url"] = next_url
+            state["current_depth"] = selected_depth
+        
         return state
 
-    async def _crawler(self, state: AgentState) -> AgentState:
+    def _crawler_node(self, state: AgentState) -> AgentState:
         url = state.get("current_url")
         if not url:
             return state
 
         try:
-            page_data: Optional[PageData] = await self.crawler.fetch(url)
+            page_data: Optional[PageData] = self.crawler.fetch(url)
             if page_data:
                 state["pages_raw"][url] = page_data.markdown
                 state["_current_links"] = page_data.links
@@ -82,39 +73,45 @@ class WebParsingGraph:
         state["pages_processed"] = state.get("pages_processed", 0) + 1
         return state
 
-    def _extractor(self, state: AgentState) -> AgentState:
+    def _extractor_node(self, state: AgentState) -> AgentState:
         url = state.get("current_url")
         if not url:
             return state
 
         markdown = state["pages_raw"].get(url, "")
         if not markdown:
+            state["chunks_extracted"][url] = [{}]
             state["page_results"][url] = {}
             return state
 
-        if self.extractor:
-            result = self.extractor.extract(
-                markdown=markdown,
-                goal=state["goal"],
-                mode=state.get("mode", "flexible"),
-                schema=state.get("schema")
-            )
-        else:
-            result = {}
+        chunk_results = self.extractor.extract(
+            markdown=markdown,
+            goal=state["goal"],
+            mode=state.get("mode", "flexible"),
+            schema=state.get("schema")
+        )
+        state["chunks_extracted"][url] = chunk_results
 
-        state["page_results"][url] = result
+        schema = state.get("schema")
+        if schema:
+            page_result = self.aggregator.aggregate_strict(chunk_results, schema)
+        else:
+            page_result = self.aggregator.aggregate_flexible(chunk_results)
+        state["page_results"][url] = page_result
 
         new_links = state.get("_current_links", [])
-        to_visit = state.get("to_visit", [])
+        to_visit: List[Tuple[str, int]] = state.get("to_visit", [])
         visited = set(state["pages_raw"].keys())
+        current_depth = state.get("current_depth", 0)
+        next_depth = current_depth + 1
 
         for link in new_links:
             full_url = self._normalize_url(url, link)
-            if full_url and full_url not in visited and full_url not in to_visit:
-                to_visit.append(full_url)
+            if full_url and full_url not in visited:
+                if not any(u == full_url for u, _ in to_visit):
+                    to_visit.append((full_url, next_depth))
 
         state["to_visit"] = to_visit
-        state["current_depth"] = state.get("current_depth", 0) + 1
         return state
 
     def _normalize_url(self, base: str, href: str) -> Optional[str]:
@@ -123,102 +120,85 @@ class WebParsingGraph:
         full = urljoin(base, href)
         parsed = urlparse(full)
         base_domain = urlparse(base).netloc
+
         if parsed.netloc and parsed.netloc != base_domain:
             return None
+
+        skip_ext = ('.pdf', '.jpg', '.jpeg', '.png', '.gif', '.svg', '.css',
+                    '.js', '.zip', '.tar', '.gz', '.mp4', '.mp3', '.avi')
+        path_lower = parsed.path.lower()
+        if any(path_lower.endswith(ext) for ext in skip_ext):
+            return None
+
         return full.split("#")[0]
 
     def _should_continue(self, state: AgentState) -> str:
+        if state.get("done"):
+            return "aggregate"
+        
         to_visit = state.get("to_visit", [])
-        depth = state.get("current_depth", 0)
         pages = state.get("pages_processed", 0)
-        max_depth = state.get("max_depth", self.max_depth)
         max_pages = state.get("max_pages", self.max_pages)
 
-        if not to_visit or depth >= max_depth or pages >= max_pages:
+        if not to_visit or pages >= max_pages:
             return "aggregate"
+        
         return "continue"
 
-    def _aggregator(self, state: AgentState) -> AgentState:
+    def _aggregator_node(self, state: AgentState) -> AgentState:
         page_results = state.get("page_results", {})
 
         if not page_results:
             state["final_result"] = {}
             return state
 
-        if self.aggregator:
-            final = self.aggregator.aggregate(
-                page_results=page_results,
-                goal=state["goal"]
-            )
+        all_data: List[Dict] = list(page_results.values())
+
+        schema = state.get("schema")
+        if schema:
+            final = self.aggregator.aggregate_strict(all_data, schema)
         else:
-            final = self._fallback_aggregate(page_results)
+            final = self.aggregator.aggregate_flexible(all_data)
 
         state["final_result"] = final
         return state
 
-    def _fallback_aggregate(self, page_results: Dict) -> Dict:
-        merged = {}
-        for result in page_results.values():
-            if isinstance(result, dict):
-                for key, value in result.items():
-                    if key in merged:
-                        if isinstance(merged[key], list):
-                            if value not in merged[key]:
-                                merged[key].append(value)
-                        elif merged[key] != value:
-                            merged[key] = [merged[key], value]
-                    else:
-                        merged[key] = value
-        return merged
-
-    def _build_sync_workflow(self):
+    def _build_workflow(self):
         workflow = StateGraph(AgentState)
 
-        def sync_crawler(state):
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+        workflow.add_node("navigator", self._navigator_node)
+        workflow.add_node("crawler", self._crawler_node)
+        workflow.add_node("extractor", self._extractor_node)
+        workflow.add_node("aggregator", self._aggregator_node)
 
-            if loop:
-                import nest_asyncio
-                nest_asyncio.apply()
-                return loop.run_until_complete(self._crawler(state))
-            else:
-                return asyncio.run(self._crawler(state))
-
-        workflow.add_node("init", self._init_state)
-        workflow.add_node("navigator", self._navigator)
-        workflow.add_node("crawler", sync_crawler)
-        workflow.add_node("extractor", self._extractor)
-        workflow.add_node("aggregator", self._aggregator)
-
-        workflow.set_entry_point("init")
-        workflow.add_edge("init", "navigator")
-        workflow.add_edge("navigator", "crawler")
+        workflow.set_entry_point("navigator")
+        
+        workflow.add_conditional_edges(
+            "navigator",
+            lambda state: "crawl" if state.get("current_url") else "aggregate",
+            {"crawl": "crawler", "aggregate": "aggregator"}
+        )
+        
         workflow.add_edge("crawler", "extractor")
+        
         workflow.add_conditional_edges(
             "extractor",
             self._should_continue,
             {"continue": "navigator", "aggregate": "aggregator"}
         )
+        
         workflow.add_edge("aggregator", END)
 
         return workflow.compile()
 
-    async def run(
-        self,
-        start_url: str,
-        goal: str,
-        mode: str = "flexible",
-        schema=None
-    ) -> Dict[str, Any]:
+    def run(self, start_url: str, goal: str, mode: str = "flexible", schema=None) -> Dict[str, Any]:
         initial_state: AgentState = {
             "start_url": start_url,
             "goal": goal,
             "mode": mode,
             "schema": schema,
-            "to_visit": [start_url],
+            "to_visit": [(start_url, 0)],
+            "current_url": None,
             "current_depth": 0,
             "pages_raw": {},
             "page_results": {},
@@ -228,11 +208,13 @@ class WebParsingGraph:
             "max_chunk_size": 8000,
             "pages_processed": 0,
             "done": False,
-            "current_url": None,
-            "chunks": {},
             "chunks_extracted": {},
         }
 
-        workflow = self._build_sync_workflow()
-        result = await workflow.ainvoke(initial_state)
-        return result.get("final_result", {})
+        result = self._workflow.invoke(initial_state)
+        return {
+            "final_result": result.get("final_result", {}),
+            "pages_processed": result.get("pages_processed", 0),
+            "visited_urls": list(result.get("pages_raw", {}).keys()),
+            "to_visit": result.get("to_visit", [])
+        }

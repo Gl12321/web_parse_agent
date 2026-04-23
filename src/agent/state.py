@@ -1,26 +1,24 @@
-from typing import Optional, Type, List, Dict
+from typing import Optional, Type, List, Dict, Tuple
 from pydantic import BaseModel
 from typing import TypedDict
 
 class AgentState(TypedDict):
     start_url: str
-    goal: str # info for prompt
-    mode: str # strict or flexible
-    schema: Optional[Type[BaseModel]] # pydantic schema
+    goal: str
+    mode: str
+    schema: Optional[Type[BaseModel]]
 
-    to_visit: List[str]
+    to_visit: List[Tuple[str, int]]
+    current_url: Optional[str]
     current_depth: int
 
-    pages_raw: Dict[str, str] # url -> markdown
+    pages_raw: Dict[str, str]
 
-    chunks: Dict[str, List[str]]       # url -> [chunk1, chunk2, ...]
-    chunks_extracted: Dict[str, List[Dict]]  # url -> [json1, json2, ...]
+    chunks_extracted: Dict[str, List[Dict]]
 
-    page_results: Dict[str, Dict]      # url -> агрегированный JSON по странице
+    page_results: Dict[str, Dict]
+    final_result: Optional[Dict]
 
-    final_result: Optional[Dict]       # Итоговый JSON после агрегации всех страниц
-
-    #контроль
     max_depth: int
     max_pages: int
     max_chunk_size: int
