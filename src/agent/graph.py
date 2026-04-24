@@ -14,7 +14,7 @@ class WebParsingGraph:
         navigator=None,
         extractor=None,
         aggregator=None,
-        crawler: Optional[CrawlerAgent] = None,
+        crawler=None,
         max_depth: int = 3,
         max_pages: int = 10
     ):
