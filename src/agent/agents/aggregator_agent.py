@@ -2,6 +2,8 @@ from typing import Dict, Any, List, Type, Optional
 import json
 
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_classic.output_parsers import OutputFixingParser
 from pydantic import BaseModel
 
 from src.agent.agents.base import BaseAgent
@@ -48,40 +50,46 @@ class AggregatorAgent(BaseAgent):
     def _llm_aggregate(self, data: List[Dict[str, Any]], schema: Optional[Type[BaseModel]] = None) -> Dict[str, Any]:
         data_json = json.dumps(data, ensure_ascii=False, indent=2)
 
+        fixing_parser = None
+        if schema:
+            parser = PydanticOutputParser(pydantic_object=schema)
+            fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=self.llm)
+
         prompt = f"""Merge and deduplicate the following JSON data:
         
             {data_json}
             
             Instructions:
             1. Merge all objects into one
-            2. For duplicate keys with different values, combine into arrays
+            2. For duplicate keys with different values, keep the best/most complete value (NOT an array for string fields)
             3. Remove duplicate values in arrays
-            4. Return only valid JSON, no markdown"""
+            4. Return only valid JSON, no text"""
 
         if schema:
-            schema_json = schema.model_json_schema()
             prompt += f"""
+                
                 You MUST follow this schema exactly:
-                {json.dumps(schema_json, indent=2)}
+                {json.dumps(schema.model_json_schema(), indent=2)}
                 
                 - Only fields from the schema
                 - No extra fields
-                - Use null for missing data"""
+                - Use null for missing data
+                - String fields must be strings, NOT arrays
+                - For name/description/etc: pick ONE best value, don't make a list"""
 
-        try:
-            messages = [
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=prompt)
-            ]
+        messages = [
+            SystemMessage(content=self.system_prompt),
+            HumanMessage(content=prompt)
+        ]
 
-            response = self.llm.invoke(messages)
-            content = self._clean_json(response.content)
+        response = self.llm.invoke(messages)
+        content = self._clean_json(response.content)
 
+        if fixing_parser:
+            parsed = fixing_parser.parse(content)
+            return parsed.model_dump()
+        else:
             return json.loads(content)
-
-        except Exception as e:
-            logger.error(f"LLM aggregation failed: {e}")
-            return self._simple_merge(data)
 
     def _clean_json(self, content: str) -> str:
         content = content.strip()
@@ -92,21 +100,3 @@ class AggregatorAgent(BaseAgent):
         if content.endswith("```"):
             content = content[:-3]
         return content.strip()
-
-    def _simple_merge(self, data: List[Dict]) -> Dict:
-        merged = {}
-        for item in data:
-            for key, value in item.items():
-                if key not in merged:
-                    merged[key] = value
-                elif isinstance(merged[key], list) and isinstance(value, list):
-                    seen = set(str(x) for x in merged[key])
-                    for v in value:
-                        if str(v) not in seen:
-                            merged[key].append(v)
-                elif merged[key] != value:
-                    if not isinstance(merged[key], list):
-                        merged[key] = [merged[key]]
-                    if value not in merged[key]:
-                        merged[key].append(value)
-        return merged
