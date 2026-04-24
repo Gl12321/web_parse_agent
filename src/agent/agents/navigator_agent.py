@@ -15,10 +15,14 @@ class NavigatorAgent(BaseAgent):
 
     def select_next_url(self, candidates: List[str], goal: str) -> Optional[str]:
         if not candidates:
+            logger.info("Navigator: no candidates, returning None")
             return None
         if len(candidates) == 1:
+            logger.info(f"Navigator: single candidate, returning {candidates[0]}")
             return candidates[0]
-        return self._llm_select(candidates, goal)
+        result = self._llm_select(candidates, goal)
+        logger.info(f"Navigator: LLM selected {result}")
+        return result
 
     def _llm_select(self, candidates: List[str], goal: str) -> Optional[str]:
         prompt = f"""Goal: {goal}

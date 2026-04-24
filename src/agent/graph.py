@@ -6,6 +6,9 @@ from langgraph.graph import StateGraph, END
 from src.agent.state import AgentState
 from src.agent.agents.crawler_agent import CrawlerAgent
 from src.infrastructure.crawler import PageData
+from src.core.logger import setup_logger
+
+logger = setup_logger("GRAPH")
 
 
 class WebParsingGraph:
@@ -30,19 +33,25 @@ class WebParsingGraph:
         max_depth = state.get("max_depth", self.max_depth)
         to_visit = state.get("to_visit", [])
         
+        logger.info(f"Navigator: queue has {len(to_visit)} URLs, max_depth={max_depth}")
+        
         to_visit = [(u, d) for u, d in to_visit if d <= max_depth]
         state["to_visit"] = to_visit
         
         if not to_visit:
+            logger.info("Navigator: queue empty, done")
             state["done"] = True
             state["current_url"] = None
             state["current_depth"] = 0
             return state
 
         candidates = [u for u, _ in to_visit]
+        logger.info(f"Navigator: {len(candidates)} candidates: {candidates[:3]}...")
+        
         next_url = self.navigator.select_next_url(candidates, state["goal"])
 
         if next_url is None:
+            logger.info("Navigator: no URL selected, done")
             state["done"] = True
             state["current_url"] = None
             state["current_depth"] = 0
@@ -51,6 +60,7 @@ class WebParsingGraph:
             state["to_visit"] = [(u, d) for u, d in to_visit if u != next_url]
             state["current_url"] = next_url
             state["current_depth"] = selected_depth
+            logger.info(f"Navigator: selected {next_url} at depth {selected_depth}")
         
         return state
 
@@ -64,12 +74,15 @@ class WebParsingGraph:
             if page_data:
                 state["pages_raw"][url] = page_data.markdown
                 state["_current_links"] = page_data.links
+                logger.info(f"Crawler found {len(page_data.links)} links on {url}")
             else:
                 state["pages_raw"][url] = ""
                 state["_current_links"] = []
-        except Exception:
+                logger.warning(f"Crawler returned no data for {url}")
+        except Exception as e:
             state["pages_raw"][url] = ""
             state["_current_links"] = []
+            logger.error(f"Crawler failed for {url}: {e}")
 
         state["pages_processed"] = state.get("pages_processed", 0) + 1
         return state
@@ -106,11 +119,17 @@ class WebParsingGraph:
         current_depth = state.get("current_depth", 0)
         next_depth = current_depth + 1
 
+        added_count = 0
         for link in new_links:
             full_url = self._normalize_url(url, link)
             if full_url and full_url not in visited:
                 if not any(u == full_url for u, _ in to_visit):
                     to_visit.append((full_url, next_depth))
+                    added_count += 1
+
+        logger.info(f"Extractor: {len(new_links)} raw links, {added_count} added to queue (depth {next_depth})")
+        if added_count > 0:
+            logger.info(f"Queue now has {len(to_visit)} URLs")
 
         state["to_visit"] = to_visit
         return state

@@ -10,7 +10,7 @@ logger = setup_logger("EXTRACTOR_AGENT")
 
 
 class ExtractorAgent(BaseAgent):
-    def __init__(self, llm=None, chunk_size: int = 4000):
+    def __init__(self, llm=None, chunk_size: int = 8000):
         super().__init__(llm)
         self.flexible_extractor = FlexibleExtractor(self.llm, chunk_size)
         self.strict_extractor = StrictExtractor(self.llm, chunk_size)

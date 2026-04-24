@@ -3,7 +3,7 @@ import json
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.language_models import BaseChatModel
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import TokenTextSplitter
 
 from src.core.logger import setup_logger
 
@@ -11,13 +11,11 @@ logger = setup_logger("FLEXIBLE_EXTRACTOR")
 
 
 class FlexibleExtractor:
-    def __init__(self, llm: BaseChatModel, chunk_size: int = 4000):
+    def __init__(self, llm: BaseChatModel, chunk_size: int = 8000):
         self.llm = llm
-        self.text_splitter = RecursiveCharacterTextSplitter(
+        self.text_splitter = TokenTextSplitter(
             chunk_size=chunk_size,
-            chunk_overlap=500,
-            length_function=len,
-            separators=["\n\n", "\n", ". ", " ", ""]
+            chunk_overlap=200
         )
         self.system_prompt = """You are a data extraction specialist.
             Extract all relevant information from the provided content.
