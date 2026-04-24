@@ -16,18 +16,23 @@ class AggregatorAgent(BaseAgent):
         self.system_prompt = "You are a data aggregation specialist. Merge and deduplicate data."
 
     def aggregate_flexible(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        logger.info(f"Aggregate flexible: {len(data)} items")
         if not data:
             return {}
         if len(data) == 1:
+            logger.info("Aggregate flexible: single item, no aggregation needed")
             return data[0]
         return self._llm_aggregate(data, schema=None)
 
     def aggregate_strict(self, data: List[Dict[str, Any]], schema: Type[BaseModel]) -> Dict[str, Any]:
+        logger.info(f"Aggregate strict: {len(data)} items for schema {schema.__name__}")
         if not data:
             return schema().model_dump()
         if len(data) == 1:
             try:
-                return schema.model_validate(data[0]).model_dump()
+                result = schema.model_validate(data[0]).model_dump()
+                logger.info("Aggregate strict: single item, no aggregation needed")
+                return result
             except:
                 return data[0]
 

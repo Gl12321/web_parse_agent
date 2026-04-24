@@ -13,6 +13,7 @@ class AgentState(TypedDict):
     current_depth: int
 
     pages_raw: Dict[str, str]
+    _current_links: List[str]
 
     chunks_extracted: Dict[str, List[Dict]]
 

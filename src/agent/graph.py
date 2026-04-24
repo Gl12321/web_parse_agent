@@ -221,6 +221,7 @@ class WebParsingGraph:
             "current_url": None,
             "current_depth": 0,
             "pages_raw": {},
+            "_current_links": [],
             "page_results": {},
             "final_result": None,
             "max_depth": self.max_depth,
