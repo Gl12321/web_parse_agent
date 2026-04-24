@@ -20,8 +20,5 @@ class AgentState(TypedDict):
     page_results: Dict[str, Dict]
     final_result: Optional[Dict]
 
-    max_depth: int
-    max_pages: int
-    max_chunk_size: int
     pages_processed: int
     done: bool
