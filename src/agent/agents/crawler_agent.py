@@ -9,7 +9,6 @@ logger = setup_logger("CRAWLER_AGENT")
 
 class CrawlerAgent(BaseAgent):
     def __init__(self):
-        super().__init__()
         self.crawler = Crawl4AIAdapter(use_stealth=True)
 
     def fetch(self, url: str) -> Optional[PageData]:

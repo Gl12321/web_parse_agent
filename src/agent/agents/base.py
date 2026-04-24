@@ -10,7 +10,7 @@ logger = setup_logger("BASE_AGENT")
 
 class BaseAgent:
     def __init__(self, llm: Optional[BaseChatModel] = None):
-        self.llm = llm if llm else get_llm()
+        self.llm = llm
         self.system_prompt = ""
         logger.info(f"Initialized {self.__class__.__name__}")
 
