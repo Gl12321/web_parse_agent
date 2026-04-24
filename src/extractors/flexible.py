@@ -23,9 +23,6 @@ class FlexibleExtractor:
             If no relevant information is found, return an empty object: {}"""
 
     def extract(self, markdown: str, goal: str) -> List[Dict[str, Any]]:
-        if not markdown or not markdown.strip():
-            return [{}]
-
         chunks = self.text_splitter.split_text(markdown)
         logger.info(f"Processing {len(chunks)} chunk(s) for goal: {goal}")
 

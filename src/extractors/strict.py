@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.language_models import BaseChatModel
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_classic.output_parsers import OutputFixingParser
 from langchain_text_splitters import TokenTextSplitter
 
 from src.core.logger import setup_logger
@@ -19,11 +21,8 @@ class StrictExtractor:
         )
 
     def extract(self, markdown: str, goal: str, schema: Type[BaseModel]) -> List[Dict[str, Any]]:
-        if not markdown or not markdown.strip():
-            return [schema().model_dump()]
-
         chunks = self.text_splitter.split_text(markdown)
-        logger.info(f"Strict extraction: {len(chunks)} chunk(s) for schema {schema.__name__}")
+        logger.info(f"Strict extraction {len(chunks)} chunk for schema {schema.__name__}")
 
         results = []
         for i, chunk in enumerate(chunks):
@@ -34,9 +33,8 @@ class StrictExtractor:
         return results if results else [schema().model_dump()]
 
     def _extract_chunk(self, chunk: str, goal: str, schema: Type[BaseModel], chunk_index: int = 0) -> Dict[str, Any]:
-        import json
-
-        schema_json = schema.model_json_schema()
+        parser = PydanticOutputParser(pydantic_object=schema)
+        fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=self.llm)
 
         prompt = f"""Extract information about: {goal}
 
@@ -45,9 +43,8 @@ class StrictExtractor:
             {chunk}
             ---
             
-            You MUST return a JSON object matching this exact schema:
-            {json.dumps(schema_json, indent=2)}
-            
+            {parser.get_format_instructions()}
+
             Rules:
             - Follow schema structure exactly
             - Use null for missing fields
@@ -67,9 +64,13 @@ class StrictExtractor:
             response = self.llm.invoke(messages)
             content = self._clean_json(response.content)
 
-            parsed = schema.model_validate_json(content)
-            logger.info(f"Chunk {chunk_index}: strict extraction OK")
-            return parsed.model_dump()
+            try:
+                parsed = fixing_parser.parse(content)
+                logger.info(f"Chunk {chunk_index}: strict extraction OK")
+                return parsed.model_dump()
+            except Exception as e:
+                logger.error(f"Chunk {chunk_index}: OutputFixingParser failed: {e}")
+                return schema().model_dump()
 
         except Exception as e:
             logger.error(f"Chunk {chunk_index}: extraction failed: {e}")
