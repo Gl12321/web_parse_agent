@@ -1,19 +1,14 @@
-import os
-import sys
 from typing import Optional, Type
 from pydantic import BaseModel
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from src.infrastructure.crawler import Crawl4AIAdapter
-from src.agent.agents import NavigatorAgent, ExtractorAgent, AggregatorAgent
+from src.infrastructure.llm.llm_wrapper import get_llm
+from src.agent.agents.base import BaseAgent
+from src.agent.agents.extractor_agent import ExtractorAgent
+from src.agent.agents.navigator_agent import NavigatorAgent
+from src.agent.agents.aggregator_agent import AggregatorAgent
+from src.agent.agents.crawler_agent import CrawlerAgent
 from src.agent.graph import WebParsingGraph
-
-
-class ContactInfo(BaseModel):
-    emails: list[str] = []
-    phones: list[str] = []
-    addresses: list[str] = []
+from src.extractors.schemas.contact import ContactInfo
 
 
 def run_parser(
@@ -26,11 +21,10 @@ def run_parser(
 ) -> dict:
 
     llm = get_llm()
-
     navigator = NavigatorAgent(llm)
     extractor = ExtractorAgent(llm)
     aggregator = AggregatorAgent(llm)
-    crawler = Crawl4AIAdapter(llm)
+    crawler = CrawlerAgent()
 
     graph = WebParsingGraph(
         navigator=navigator,
@@ -41,10 +35,9 @@ def run_parser(
         max_pages=max_pages
     )
 
-    print(f"Starting crawl: {url}")
-    print(f"Goal: {goal}")
-    print(f"Mode: {mode}, Max depth: {max_depth}, Max pages: {max_pages}")
-    print("-" * 50)
+    print(f"Starting crawl {url}")
+    print(f"Goal {goal}")
+    print(f"Mode {mode} Max depth {max_depth} Max pages {max_pages}")
 
     result = graph.run(
         start_url=url,
@@ -53,7 +46,6 @@ def run_parser(
         schema=schema
     )
 
-    print("-" * 50)
     print(f"Pages processed: {result['pages_processed']}")
     print(f"Visited: {result['visited_urls']}")
     print(f"Remaining in queue: {len(result['to_visit'])}")
@@ -63,38 +55,36 @@ def run_parser(
 
 def main():
     print("=" * 60)
-    print("EXAMPLE 1: Flexible extraction")
+    print("EXAMPLE 1 Flexible extraction")
     print("=" * 60)
 
-    url = "https://jet.su/about/contacts/"
+    url = "https://jet.su"
 
     result = run_parser(
         url=url,
         goal="Extract all contact information including emails, phone numbers, and addresses",
         mode="flexible",
-        max_depth=1,
-        max_pages=3
+        max_depth=3,
+        max_pages=10
     )
 
     print("\nFinal result:")
     import json
-    print(json.dumps(result['final_result'], indent=2, ensure_ascii=False))
+    print(json.dumps(result['final_result']))
 
-    print("\n" + "=" * 60)
-    print("EXAMPLE 2: Strict extraction with Pydantic schema")
-    print("=" * 60)
+    print("EXAMPLE 2 Strict extraction with Pydantic schema")
 
     result = run_parser(
         url=url,
         goal="Extract contact information",
         mode="strict",
         schema=ContactInfo,
-        max_depth=1,
-        max_pages=3
+        max_depth=3,
+        max_pages=10
     )
 
-    print("\nFinal result:")
-    print(json.dumps(result['final_result'], indent=2, ensure_ascii=False))
+    print("\nFinal result")
+    print(json.dumps(result['final_result']))
 
 
 if __name__ == "__main__":
