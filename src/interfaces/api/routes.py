@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from src.application.orchestrator import ParseOrchestrator
@@ -8,8 +10,21 @@ from src.extractors.schemas.legal import LegalInfo
 
 
 parse_router = APIRouter()
-orchestrator = ParseOrchestrator()
 fetch_service = FetchService()
+
+executor = ProcessPoolExecutor(max_workers=3)
+
+
+def _run_parsing(url: str, goal: str, schema, mode: str, max_depth: int, max_pages: int):
+    orchestrator = ParseOrchestrator()
+    return orchestrator.run(
+        url=url,
+        goal=goal,
+        schema=schema,
+        mode=mode,
+        max_depth=max_depth,
+        max_pages=max_pages
+    )
 
 SCHEMA_MAP = {
     "contact": ContactInfo,
@@ -32,24 +47,27 @@ class ResultRequest(BaseModel):
 
 
 @parse_router.post("/parse")
-def parse(request: ParseRequest):
+async def parse(request: ParseRequest):
     schema = SCHEMA_MAP.get(request.schema) if request.schema else None
 
-    result = orchestrator.run(
-        url=request.url,
-        goal=request.goal,
-        schema=schema,
-        mode=request.mode,
-        max_depth=request.max_depth,
-        max_pages=request.max_pages
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        executor,
+        _run_parsing,
+        request.url,
+        request.goal,
+        schema,
+        request.mode,
+        request.max_depth,
+        request.max_pages
     )
 
     return result
 
 
 @parse_router.get("/result")
-def get_result(schema_key: str, url: str):
+async def get_result(schema_key: str, url: str):
     result = fetch_service.get_results(schema_key, url)
-    if  result is None:
+    if result is None:
         raise HTTPException(status_code=404)
     return {"result": result}
