@@ -6,7 +6,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_classic.output_parsers import OutputFixingParser
 from pydantic import BaseModel
 
-from src.agent.agents.base import BaseAgent
+from src.agent.nodes.base import BaseAgent
 from src.core.logger import setup_logger
 
 logger = setup_logger("AGGREGATOR_AGENT")

@@ -1,6 +1,6 @@
-from typing import Optional, List
+from typing import Optional
 
-from src.agent.agents.base import BaseAgent
+from src.agent.nodes.base import BaseAgent
 from src.infrastructure.crawler import Crawl4AIAdapter, PageData
 from src.core.logger import setup_logger
 

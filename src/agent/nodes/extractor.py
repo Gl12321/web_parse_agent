@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, Type, List
 from pydantic import BaseModel
 
-from src.agent.agents.base import BaseAgent
+from src.agent.nodes.base import BaseAgent
 from src.extractors.flexible import FlexibleExtractor
 from src.extractors.strict import StrictExtractor
 from src.core.logger import setup_logger

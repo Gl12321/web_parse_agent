@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from src.agent.agents.base import BaseAgent
+from src.agent.nodes.base import BaseAgent
 from src.core.logger import setup_logger
 
 logger = setup_logger("NAVIGATOR_AGENT")
