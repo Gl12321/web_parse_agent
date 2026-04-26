@@ -2,11 +2,11 @@ from typing import Optional, Type
 from pydantic import BaseModel
 
 from src.infrastructure.llm.llm_wrapper import get_llm
-from src.agent.agents.base import BaseAgent
-from src.agent.agents.extractor_agent import ExtractorAgent
-from src.agent.agents.navigator_agent import NavigatorAgent
-from src.agent.agents.aggregator_agent import AggregatorAgent
-from src.agent.agents.crawler_agent import CrawlerAgent
+from src.agent.nodes.base import BaseAgent
+from src.agent.nodes.extractor import ExtractorAgent
+from src.agent.nodes.navigator import NavigatorAgent
+from src.agent.nodes.aggregator import AggregatorAgent
+from src.agent.nodes.crawler import CrawlerAgent
 from src.agent.graph import WebParsingGraph
 from src.extractors.schemas.contact import ContactInfo
 
